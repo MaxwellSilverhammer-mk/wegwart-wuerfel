@@ -1,13 +1,15 @@
 /*
  * Wegwart-Würfel – Würfelkästen für die geteilte Welt „Hold der Seeprinzen“
- * Version 1.0
+ * Version 1.1
  *
  * Aufruf in einem Visualizer-Widget:
  *   <div id="wk">Würfelkasten lädt …</div>
  *   <script>WK={art:'probe',nr:1,name:'Überzeugen',bonus:4,sg:15}</script>
- *   <script src="https://cdn.jsdelivr.net/gh/<konto>/wegwart-wuerfel@v1.0/wuerfel.js"></script>
+ *   <script src="https://cdn.jsdelivr.net/gh/<konto>/wegwart-wuerfel@<stand>/wuerfel.js"></script>
  *
- * Arten: probe · rettung · tod · angriff · schaden · heilung · inspiration · trefferwuerfel
+ * Arten: probe · rettung · tod · angriff · schaden · heilung · inspiration · trefferwuerfel · wurf
+ * wurf (seit 1.1): ein Wurf, der nur zählt (Sleep, Stunden, Mengen), ohne Schadensanzeige;
+ *   `einheit` sagt, was die Zahl zählt (etwa 'Trefferpunkte').
  * Zufall: crypto.getRandomValues mit Verwerfen, also exakt gleichverteilt.
  * Das Ergebnis geht per sendPrompt als Nachricht an die Spielleitung.
  */
@@ -409,15 +411,18 @@
     }
   }
 
-  /* ---------- Würfelpool: Schaden, Heilung, Inspiration, Trefferwürfel ---------- */
+  /* ---------- Würfelpool: Schaden, Heilung, Inspiration, Trefferwürfel, Wurf ---------- */
+  /* je Art: Marke, Farbton, Zeichen, Wort hinter der Zahl */
   var POOLART = {
     schaden: ['Schaden', '', '', 'Schaden'],
     heilung: ['Heilung', 'success', 'ti-heart', 'TP geheilt'],
     inspiration: ['Inspiration', 'accent', 'ti-music', 'Inspiration'],
-    trefferwuerfel: ['Trefferwürfel', 'success', 'ti-heart-plus', 'TP zurück']
+    trefferwuerfel: ['Trefferwürfel', 'success', 'ti-heart-plus', 'TP zurück'],
+    wurf: ['Wurf', '', 'ti-dice-5', '']
   };
   function pool(C, R) {
-    var E = geruest(R, true), A = POOLART[C.art] || ['Wurf', '', 'ti-dice-5', ''], mod = C.mod || 0, held = !!C.held;
+    var E = geruest(R, true), A = POOLART[C.art] || POOLART.wurf, mod = C.mod || 0, held = !!C.held;
+    var einheit = C.einheit == null ? '' : String(C.einheit), nach = C.einheit == null ? A[3] : einheit;
     var fg, fl, flash, ic;
     if (C.art === 'schaden') { var SF = schadenFarben(C.typ); fg = SF.fg; fl = SF.fl; flash = SF.flash; ic = SF.ic; }
     else { fg = A[1] ? 'var(--text-' + A[1] + ')' : 'var(--text-primary)'; fl = A[1] ? 'var(--bg-' + A[1] + ')' : 'var(--surface-1)'; flash = fl; ic = A[2]; }
@@ -425,7 +430,7 @@
     var formel = C.wuerfel.map(function (x) { return x[0] + 'W' + x[1]; }).join('+') + (mod ? (mod < 0 ? '−' : '+') + Math.abs(mod) : '');
     var D = seiten.map(function (w, i) { return wuerfelEl(w, i, E.wd, fg, fl, seiten.length > 4 ? 42 : 52, 34); });
     E.wt.textContent = C.name; E.ws.textContent = C.anlass || '';
-    marke(E, '<i class="ti ' + ic + '" aria-hidden="true"></i>' + A[0] + (C.typ ? ' · ' + C.typ : ''), fl, fg);
+    marke(E, '<i class="ti ' + ic + '" aria-hidden="true"></i>' + A[0] + (C.typ ? ' · ' + C.typ : einheit ? ' · ' + einheit : ''), fl, fg);
     marke(E, formel, 'var(--surface-1)', 'var(--text-secondary)');
     heldMarke(E, held);
     var roh = [], hm = null, lauf = false;
@@ -452,12 +457,12 @@
     function ende() {
       var s = summe();
       if (!ruhig) D.forEach(function (d) { if (roh[d.i] === d.w) anim(d.r, 'wkRing'); });
-      var st = streifen(E.wr, ic, fg, flash, '<span data-zahl style="font-size:24px">' + (ruhig ? s : 0) + '</span> ' + A[3] + (C.art === 'schaden' && C.typ ? ' · ' + C.typ : ''), roh.length > 1 || mod ? teile() : formel);
+      var st = streifen(E.wr, ic, fg, flash, '<span data-zahl style="font-size:24px">' + (ruhig ? s : 0) + '</span>' + (nach ? ' ' + nach : '') + (C.art === 'schaden' && C.typ ? ' · ' + C.typ : ''), roh.length > 1 || mod ? teile() : formel);
       zaehle(st, s);
       if (C.art === 'schaden') effekt(C.typ, st, E.wr);
       var m = ['Würfel #' + C.nr, A[0], C.name, formel];
       if (hm) m.push('Heldenmut ' + hm[0] + ' → ' + hm[1]);
-      m.push((roh.length > 1 || mod ? teile() + ' = ' : '') + s + (C.typ ? ' ' + C.typ : ''));
+      m.push((roh.length > 1 || mod ? teile() + ' = ' : '') + s + (C.typ ? ' ' + C.typ : einheit ? ' ' + einheit : ''));
       senden(E, m);
     }
   }
@@ -474,7 +479,7 @@
       R.textContent = 'Der Würfelkasten hat einen Fehler. Würfle bitte selbst und schreib das Ergebnis in den Chat.';
     }
   }
-  window.Wuerfel = { start: start, version: '1.0' };
+  window.Wuerfel = { start: start, version: '1.1' };
   (function warten(n) {
     var R = document.getElementById('wk');
     var C = typeof WK !== 'undefined' ? WK : window.WK;

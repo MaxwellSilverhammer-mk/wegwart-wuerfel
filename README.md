@@ -20,11 +20,13 @@ Würfelkästen für die geteilte Welt „Hold der Seeprinzen“, ein D&D-5e-Text
 | `tod` | `nr`, `name`, `tod: [Erfolge, Fehlschläge]` | `held`, `anlass` |
 | `angriff` | `nr`, `name`, `bonus`, `rk`, `schaden: [[Anzahl, Seiten]]` | `mod`, `typ`, `modus`, `grund`, `held`, `anlass` |
 | `schaden`, `heilung`, `inspiration`, `trefferwuerfel` | `nr`, `name`, `wuerfel: [[Anzahl, Seiten]]` | `mod`, `typ` (nur Schaden), `held`, `anlass` |
+| `wurf` (seit 1.1) | `nr`, `name`, `wuerfel: [[Anzahl, Seiten]]` | `mod`, `einheit`, `held`, `anlass` |
 
 - `modus`: `'vorteil'` oder `'nachteil'`
 - `held: true`, wenn die Figur Heldenmut hat
 - `min`/`minName`: Mindestwurf, z. B. Silberzunge (9 oder weniger zählt als 10)
 - `typ`: Säure, Wucht, Kälte, Feuer, Energie, Blitz, nekrotisch, Stich, Gift, psychisch, gleißend, Hieb, Schall. Jede Art hat eine eigene Animation.
+- `wurf`: ein Wurf, der nur zählt, ohne Schadensanzeige, Farbe oder Animation: Trefferpunkte für Sleep, Stunden, Mengen, ein Tabellenwurf mit mehreren Würfeln. `einheit` sagt, was die Zahl zählt (`'Trefferpunkte'`, `'Stunden'`); ohne `einheit` steht nur die Zahl. Die Zeile an die Spielleitung lautet dann „Würfel #4 · Wurf · Sleep · 5W8 · 3 + 7 + 2 + 8 + 5 = 25 Trefferpunkte“. Für einen einzelnen W20, der nur zählt (Initiative, Verletzungstabelle), bleibt `probe` ohne `sg`.
 
 ## Erfolgsgrade bei Proben
 
@@ -40,4 +42,7 @@ Rettungswürfe kennen nur „gelungen“ und „misslungen“. SG und RK zeigt d
 
 ## Versionen
 
-Jede Änderung bekommt einen neuen Tag (`v1.0`, `v1.1` …). Alte Aufrufe bleiben auf ihrer Version und ändern sich nicht.
+Jede Änderung bekommt einen neuen Stand. Das Regelwerk (6.2) und `meta/welt` in der Weltchronik nennen die Adresse mit dem festen Commit, der gilt; alte Aufrufe bleiben auf ihrem Stand und ändern sich nicht.
+
+- 1.0: Proben, Rettungswürfe, Todesrettungswürfe, Angriffe mit Schaden, Würfelpools für Schaden, Heilung, Inspiration und Trefferwürfel.
+- 1.1: `wurf`, der neutrale Wurf mit `einheit`.
