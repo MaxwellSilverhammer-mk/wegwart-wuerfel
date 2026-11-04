@@ -1,6 +1,6 @@
 /*
  * Wegwart-Würfel – Würfelkästen für die geteilte Welt „Hold der Seeprinzen“
- * Version 1.1
+ * Version 1.2
  *
  * Aufruf in einem Visualizer-Widget:
  *   <div id="wk">Würfelkasten lädt …</div>
@@ -10,6 +10,10 @@
  * Arten: probe · rettung · tod · angriff · schaden · heilung · inspiration · trefferwuerfel · wurf
  * wurf (seit 1.1): ein Wurf, der nur zählt (Sleep, Stunden, Mengen), ohne Schadensanzeige;
  *   `einheit` sagt, was die Zahl zählt (etwa 'Trefferpunkte').
+ * zusatz (seit 1.2) bei probe, rettung und angriff: Würfel, die nach dem W20 dazukommen, etwa
+ *   zusatz:[{name:'Guidance',wuerfel:[[1,4]]}]. Der Kasten zeigt die Zwischensumme und je einen Knopf;
+ *   der Grad kommt zuletzt. minus:true (Bane) zieht ab und würfelt von selbst. Bei natürlicher 20
+ *   oder 1 gibt es keine Knöpfe, der Zusatz bleibt unverbraucht. Heldenmut wirft nur den W20 neu.
  * Zufall: crypto.getRandomValues mit Verwerfen, also exakt gleichverteilt.
  * Das Ergebnis geht per sendPrompt als Nachricht an die Spielleitung.
  */
@@ -41,7 +45,8 @@
     '.wkBs{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}',
     '.wkL{display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:8px;font-size:12px;color:var(--text-secondary)}',
     '.wkA{display:flex;flex-wrap:wrap;gap:8px}',
-    '.wkR:empty,.wkA:empty,.wkPool:empty,.wkL:empty{display:none}',
+    '.wkZ{display:flex;flex-wrap:wrap;gap:10px}',
+    '.wkR:empty,.wkA:empty,.wkPool:empty,.wkL:empty,.wkZ:empty{display:none}',
     '.wkD{display:flex;flex-direction:column;align-items:center;gap:2px}',
     '.wkD svg{display:block;overflow:visible}',
     '.wkC{font-size:11px;line-height:14px;height:14px;white-space:nowrap}',
@@ -183,10 +188,10 @@
     R.innerHTML = pool
       ? kopf + '<div class="wkPool"></div><div class="wkR" aria-live="polite"></div><div class="wkA"></div>'
       : '<div class="wkTop"><div class="wkDice"></div>' + kopf.replace('<div>', '<div style="flex:1;min-width:0">') + '</div>' +
-        '<div class="wkR" aria-live="polite"></div><div class="wkPool"></div><div class="wkR wkR2" aria-live="polite"></div><div class="wkA"></div>';
+        '<div class="wkZ"></div><div class="wkR" aria-live="polite"></div><div class="wkPool"></div><div class="wkR wkR2" aria-live="polite"></div><div class="wkA"></div>';
     return {
       wd: $(R, pool ? '.wkPool' : '.wkDice'), wt: $(R, '.wkT'), ws: $(R, '.wkS'), wb: $(R, '.wkBs'), wl: $(R, '.wkL'),
-      wr: $(R, '.wkR'), wsd: pool ? null : $(R, '.wkPool'), wrs: pool ? null : $(R, '.wkR2'), wa: $(R, '.wkA')
+      wr: $(R, '.wkR'), wsd: pool ? null : $(R, '.wkPool'), wrs: pool ? null : $(R, '.wkR2'), wa: $(R, '.wkA'), wz: pool ? null : $(R, '.wkZ')
     };
   }
   function marke(E, html, bg, c) { var s = document.createElement('span'); s.className = 'wkB'; s.style.background = bg; s.style.color = c; s.innerHTML = html; E.wb.appendChild(s); }
@@ -200,7 +205,9 @@
   function knopf(E, html, f, st) { var b = document.createElement('button'); b.innerHTML = html; if (st) b.style.cssText = st; b.onclick = f; E.wa.appendChild(b); }
   var WURFSTIL = 'background:var(--bg-accent);color:var(--text-accent);border-color:var(--border-accent);font-weight:500;padding:8px 18px';
   var HSTIL = 'background:var(--bg-warning);color:var(--text-warning);border-color:var(--border-warning)';
-  var HTXT = '<i class="ti ti-flame" aria-hidden="true" style="font-size:16px;vertical-align:-2px;margin-right:4px"></i>Heldenmut ↗';
+  var HTXT0 = '<i class="ti ti-flame" aria-hidden="true" style="font-size:16px;vertical-align:-2px;margin-right:4px"></i>Heldenmut';
+  var HTXT = HTXT0 + ' ↗';
+  var ZSTIL = 'background:var(--bg-accent);color:var(--text-accent);border-color:var(--border-accent)';
   function ikon(ic) { return '<i class="ti ' + ic + '" aria-hidden="true" style="font-size:18px;vertical-align:-3px;margin-right:6px"></i>'; }
 
   function streifen(ziel, ic, farbe, flash, titel, rechts, lang) {
@@ -225,6 +232,58 @@
     }, ruhig ? 300 : 1400);
   }
 
+  /* ---------- Zusatz (seit 1.2): Würfel, die nach dem W20 dazukommen ---------- */
+  function zusaetze(C, E) {
+    var L = (C.art === 'tod' ? [] : C.zusatz || []).map(function (z) {
+      return { name: z.name, minus: !!z.minus, wuerfel: z.wuerfel, werte: null, wert: 0,
+        formel: z.wuerfel.map(function (x) { return (x[0] > 1 ? x[0] : '') + 'W' + x[1]; }).join('+') };
+    });
+    var fertig = [];
+    function offen(minus) { return L.filter(function (z) { return !z.werte && z.minus === minus; }); }
+    return {
+      /* Marken im Kopf: was bereitliegt */
+      marken: function () {
+        L.forEach(function (z) {
+          marke(E, '<i class="ti ti-' + (z.minus ? 'minus' : 'plus') + '" aria-hidden="true"></i>' + z.name + ' ' + z.formel,
+            z.minus ? 'var(--bg-danger)' : 'var(--bg-accent)', z.minus ? 'var(--text-danger)' : 'var(--text-accent)');
+        });
+      },
+      wahl: L.some(function (z) { return !z.minus; }),
+      offen: function () { return offen(false); },
+      abzug: function () { return offen(true)[0]; },
+      summe: function () { return fertig.reduce(function (a, z) { return a + z.wert; }, 0); },
+      terme: function () { return fertig.map(function (z) { return pm(z.wert); }).join(''); },
+      /* für die Zeile an die Spielleitung: „Guidance W4: 3“ */
+      zeilen: function () {
+        return fertig.map(function (z) {
+          var v = z.minus ? '−' : '', t = z.werte.join(' + ');
+          return z.name + ' ' + z.formel + ': ' + (z.werte.length > 1 ? (z.minus ? '−(' + t + ')' : t) + ' = ' : '') + v + Math.abs(z.wert);
+        });
+      },
+      wuerfle: function (z, danach) {
+        var fg = z.minus ? 'var(--text-danger)' : 'var(--text-accent)', fl = z.minus ? 'var(--bg-danger)' : 'var(--bg-accent)', seiten = [];
+        z.wuerfel.forEach(function (x) { for (var n = 0; n < x[0]; n++) seiten.push(x[1]); });
+        var ds = seiten.map(function (w, i) { return wuerfelEl(w, i, E.wz, fg, fl, 48, 34); });
+        ds[0].c.style.color = 'var(--text-secondary)'; ds[0].c.textContent = z.name;
+        z.werte = ds.map(function (d) { return wurf(d.w); });
+        var s = z.werte.reduce(function (a, b) { return a + b; }, 0);
+        z.wert = z.minus ? -s : s; fertig.push(z);
+        wirbel(ds, z.werte, function () {
+          if (!ruhig && !z.minus) ds.forEach(function (d) { if (z.werte[d.i] === d.w) anim(d.r, 'wkRing'); });
+          setTimeout(danach, warte(300));
+        });
+      }
+    };
+  }
+  /* Die Knöpfe je offenem Zusatz; der letzte Schritt trägt den Pfeil, denn danach geht die Zeile hinaus. */
+  function zusatzKnoepfe(E, Z, offen, heldDa, danach) {
+    offen.forEach(function (z) {
+      knopf(E, '<i class="ti ti-plus" aria-hidden="true" style="font-size:16px;vertical-align:-2px;margin-right:4px"></i>' + z.name + ' ' + z.formel + (offen.length === 1 && !heldDa ? ' ↗' : ''), function () {
+        E.wa.innerHTML = ''; Z.wuerfle(z, danach);
+      }, ZSTIL);
+    });
+  }
+
   /* ---------- W20: Probe, Rettungswurf, Todesrettungswurf ---------- */
   var GRADE = [[10, 'Glänzend gelungen', 'ti-sparkles', 'success'], [5, 'Gut gelungen', 'ti-circle-check', 'success'], [0, 'Gelungen', 'ti-check', 'success'], [-4, 'Knapp daneben', 'ti-arrow-fork', 'warning'], [-999, 'Misslungen', 'ti-x', 'danger']];
   var RETTUNG = [[0, 'Gelungen', 'ti-check', 'success'], [-999, 'Misslungen', 'ti-x', 'danger']];
@@ -235,12 +294,14 @@
     var fg = ton ? 'var(--text-' + ton + ')' : 'var(--text-primary)', fl = ton ? 'var(--bg-' + ton + ')' : 'var(--surface-1)';
     var bonus = C.bonus || 0, tod = C.art === 'tod', held = !!C.held;
     var eff = function (v) { return C.min ? Math.max(v, C.min) : v; };
-    var rech = function (v) { return bonus ? v + pm(bonus) + ' = ' + (v + bonus) : '' + v; };
+    var Z = zusaetze(C, E);
+    var rech = function (v) { var t = Z.terme(); return bonus || t ? v + pm(bonus) + t + ' = ' + (v + bonus + Z.summe()) : '' + v; };
     var titel = C.name + (tod && !bonus ? '' : ' ' + vz(bonus));
     var D = [0, 1].slice(0, zwei ? 2 : 1).map(function (i) { return wuerfelEl(20, i, E.wd, fg, fl, zwei ? 60 : 76, 27); });
     E.wt.textContent = titel; E.ws.textContent = C.anlass || '';
     if (zwei) modusMarke(E, C, fl, fg);
     if (C.min) marke(E, C.minName || 'Mindestens ' + C.min, 'var(--surface-1)', 'var(--text-secondary)');
+    Z.marken();
     heldMarke(E, held);
     function liste(e, f, ne, nf) {
       var p = function (n, neu, ic, c) { return [0, 1, 2].map(function (k) { return k < n ? '<i class="ti ' + ic + (k >= n - neu ? ' wkPop' : '') + '" aria-hidden="true" style="font-size:16px;color:var(--text-' + c + ')"></i>' : '<i class="ti ti-circle" aria-hidden="true" style="font-size:16px;color:var(--text-muted)"></i>'; }).join(''); };
@@ -261,22 +322,30 @@
       });
       return i;
     }
-    knopf(E, ikon('ti-dice-5') + 'W20 würfeln' + (held ? '' : ' ↗'), function () {
+    knopf(E, ikon('ti-dice-5') + 'W20 würfeln' + (held || Z.wahl ? '' : ' ↗'), function () {
       if (lauf) return; lauf = true; E.wa.innerHTML = '';
       roh = D.map(function () { return wurf(20); }); erst = roh.slice();
-      wirbel(D, roh, function () { var i = zeigen([0, 1]); setTimeout(function () { held ? zwischen(i) : ende(i); }, warte(400)); });
+      wirbel(D, roh, function () { var i = zeigen([0, 1]); setTimeout(function () { weiter(i); }, warte(400)); });
     }, WURFSTIL);
+    function natVon(i) { return roh[i] === 20 ? 20 : roh[i] === 1 && eff(roh[i]) === 1 ? 1 : 0; }
+    /* Nach jedem Schritt: Bane würfelt von selbst, dann die Wahl, sonst der Grad. Eine natürliche 20 oder 1 braucht keinen Zusatz (6.5). */
+    function weiter(i) {
+      var n = natVon(i), a = n ? null : Z.abzug();
+      if (a) return Z.wuerfle(a, function () { weiter(i); });
+      (held && !hm) || (!n && Z.offen().length) ? zwischen(i) : ende(i);
+    }
     function zwischen(i) {
-      var v = eff(roh[i]);
-      zwischenzeile(E.wr, bonus ? v + pm(bonus) + ' = ' : '', v + bonus);
+      var v = eff(roh[i]), t = Z.terme(), offen = natVon(i) ? [] : Z.offen(), heldDa = held && !hm;
+      zwischenzeile(E.wr, bonus || t ? v + pm(bonus) + t + ' = ' : '', v + bonus + Z.summe());
+      zusatzKnoepfe(E, Z, offen, heldDa, function () { weiter(i); });
       knopf(E, 'Behalten ↗', function () { E.wa.innerHTML = ''; ende(i); });
-      knopf(E, HTXT, function () {
+      if (heldDa) knopf(E, offen.length ? HTXT0 : HTXT, function () {
         E.wa.innerHTML = ''; var j = lo(); hm = [roh[j]]; roh[j] = wurf(20); hm.push(roh[j]);
         D[j].el.style.color = 'var(--text-warning)'; D[j].c.textContent = '';
         wirbel([D[j]], roh, function () {
           var k = zeigen([j]);
           if (!D[j].c.textContent) { D[j].c.style.color = 'var(--text-warning)'; D[j].c.innerHTML = '<i class="ti ti-flame" aria-hidden="true"></i> neu'; }
-          setTimeout(function () { ende(k); }, warte(400));
+          setTimeout(function () { weiter(k); }, warte(400));
         });
       }, HSTIL);
     }
@@ -290,7 +359,7 @@
         return [ok ? 0 : -1, t[0], t[1] + ' · Erfolge ' + e + ' · Fehlschläge ' + f, t[2], ok ? 'success' : 'danger', e, f, ne, nf];
       }
       if (C.sg == null) return null;
-      var d = nat === 20 ? 99 : nat === 1 ? -99 : v + bonus - C.sg;
+      var d = nat === 20 ? 99 : nat === 1 ? -99 : v + bonus + Z.summe() - C.sg;
       var g = (C.art === 'rettung' ? RETTUNG : GRADE).filter(function (s) { return d >= s[0]; })[0];
       return [g[0], g[1], g[1].toLowerCase(), g[2], g[3]];
     }
@@ -308,6 +377,7 @@
       if (zwei) m.push((C.modus === 'vorteil' ? 'Vorteil' : 'Nachteil') + ' (' + erst.join(', ') + ')');
       if (hm) m.push('Heldenmut ' + hm[0] + ' → ' + hm[1]);
       if (v !== roh[i]) m.push((C.minName || 'Mindestwurf') + ' ' + roh[i] + ' → ' + v);
+      Array.prototype.push.apply(m, Z.zeilen());
       m.push(rech(v)); if (st) m.push(st[2]); if (nat) m.push('natürliche ' + nat);
       senden(E, m);
     }
@@ -319,12 +389,14 @@
     var ton = C.modus === 'vorteil' ? 'success' : C.modus === 'nachteil' ? 'danger' : '';
     var fg = ton ? 'var(--text-' + ton + ')' : 'var(--text-primary)', fl = ton ? 'var(--bg-' + ton + ')' : 'var(--surface-1)';
     var bonus = C.bonus || 0, mod = C.mod || 0, held = !!C.held, SF = schadenFarben(C.typ);
-    var rech = function (v) { return v + pm(bonus) + ' = ' + (v + bonus); };
+    var Z = zusaetze(C, E);
+    var rech = function (v) { return v + pm(bonus) + Z.terme() + ' = ' + (v + bonus + Z.summe()); };
     var sform = function (k) { return C.schaden.map(function (x) { return x[0] * k + 'W' + x[1]; }).join('+') + (mod ? (mod < 0 ? '−' : '+') + Math.abs(mod) : ''); };
     var D = [0, 1].slice(0, zwei ? 2 : 1).map(function (i) { return wuerfelEl(20, i, E.wd, fg, fl, zwei ? 60 : 76, 27); });
     E.wt.textContent = C.name + ' ' + vz(bonus); E.ws.textContent = C.anlass || '';
     marke(E, '<i class="ti ' + SF.ic + '" aria-hidden="true"></i>' + sform(1) + (C.typ ? ' ' + C.typ : ''), SF.fl, SF.fg);
     if (zwei) modusMarke(E, C, fl, fg);
+    Z.marken();
     heldMarke(E, held);
     var roh = [], erst = [], hm = null, hmS = null, lauf = false, S = [], rs = [], krit = false, treffer = false, v0 = 0, nat = 0;
     function lo() { if (!zwei) return 0; return roh[0] <= roh[1] ? 0 : 1; }
@@ -339,25 +411,33 @@
       });
       return i;
     }
-    knopf(E, ikon('ti-swords') + 'Angriff würfeln' + (held ? '' : ' ↗'), function () {
+    knopf(E, ikon('ti-swords') + 'Angriff würfeln' + (held || Z.wahl ? '' : ' ↗'), function () {
       if (lauf) return; lauf = true; E.wa.innerHTML = '';
       roh = D.map(function () { return wurf(20); }); erst = roh.slice();
-      wirbel(D, roh, function () { var i = zeigen(); setTimeout(function () { held ? zwischen(i) : aufloesen(i); }, warte(400)); });
+      wirbel(D, roh, function () { var i = zeigen(); setTimeout(function () { weiter(i); }, warte(400)); });
     }, WURFSTIL);
+    function natVon(i) { return roh[i] === 20 || roh[i] === 1; }
+    function weiter(i) {
+      var n = natVon(i), a = n ? null : Z.abzug();
+      if (a) return Z.wuerfle(a, function () { weiter(i); });
+      (held && !hm) || (!n && Z.offen().length) ? zwischen(i) : aufloesen(i);
+    }
     function zwischen(i) {
-      zwischenzeile(E.wr, roh[i] + pm(bonus) + ' = ', roh[i] + bonus);
+      var offen = natVon(i) ? [] : Z.offen(), heldDa = held && !hm;
+      zwischenzeile(E.wr, roh[i] + pm(bonus) + Z.terme() + ' = ', roh[i] + bonus + Z.summe());
+      zusatzKnoepfe(E, Z, offen, heldDa, function () { weiter(i); });
       knopf(E, 'Behalten ↗', function () { E.wa.innerHTML = ''; aufloesen(i); });
-      knopf(E, HTXT, function () {
+      if (heldDa) knopf(E, offen.length ? HTXT0 : HTXT, function () {
         E.wa.innerHTML = ''; var j = lo(); hm = [roh[j]]; roh[j] = wurf(20); hm.push(roh[j]); D[j].el.style.color = 'var(--text-warning)';
         wirbel([D[j]], roh, function () {
           var k = zeigen();
           if (!D[j].c.textContent) { D[j].c.style.color = 'var(--text-warning)'; D[j].c.innerHTML = '<i class="ti ti-flame" aria-hidden="true"></i> neu'; }
-          setTimeout(function () { aufloesen(k); }, warte(400));
+          setTimeout(function () { weiter(k); }, warte(400));
         });
       }, HSTIL);
     }
     function aufloesen(i) {
-      v0 = roh[i]; nat = v0 === 20 ? 20 : v0 === 1 ? 1 : 0; krit = nat === 20; treffer = krit || (nat !== 1 && v0 + bonus >= C.rk);
+      v0 = roh[i]; nat = v0 === 20 ? 20 : v0 === 1 ? 1 : 0; krit = nat === 20; treffer = krit || (nat !== 1 && v0 + bonus + Z.summe() >= C.rk);
       streifen(E.wr, krit ? 'ti-sparkles' : treffer ? 'ti-target' : 'ti-x', treffer ? 'var(--text-success)' : 'var(--text-danger)', treffer ? 'var(--bg-success)' : 'var(--bg-danger)',
         (krit ? 'Kritischer Treffer' : treffer ? 'Treffer' : 'Daneben') + (nat ? '<span class="sr-only">, natürliche ' + nat + '</span>' : ''), rech(v0), krit);
       if (!ruhig) {
@@ -400,6 +480,7 @@
       var m = ['Würfel #' + C.nr, 'Angriff', C.name + ' ' + vz(bonus)];
       if (zwei) m.push((C.modus === 'vorteil' ? 'Vorteil' : 'Nachteil') + ' (' + erst.join(', ') + ')');
       if (hm) m.push('Heldenmut ' + hm[0] + ' → ' + hm[1]);
+      Array.prototype.push.apply(m, Z.zeilen());
       m.push(rech(v0), krit ? 'kritischer Treffer' : treffer ? 'Treffer' : 'daneben');
       if (nat) m.push('natürliche ' + nat);
       if (treffer) {
@@ -479,7 +560,7 @@
       R.textContent = 'Der Würfelkasten hat einen Fehler. Würfle bitte selbst und schreib das Ergebnis in den Chat.';
     }
   }
-  window.Wuerfel = { start: start, version: '1.1' };
+  window.Wuerfel = { start: start, version: '1.2' };
   (function warten(n) {
     var R = document.getElementById('wk');
     var C = typeof WK !== 'undefined' ? WK : window.WK;
