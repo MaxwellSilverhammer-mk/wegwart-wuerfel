@@ -1,5 +1,5 @@
 /*
- * Wegwart-Würfel – Würfelkästen für die geteilte Welt „Hold der Seeprinzen“
+ * Wegwart-Würfel – Würfelkästen für die geteilte Welt „Oerik“
  * Version 1.2
  *
  * Aufruf in einem Visualizer-Widget:

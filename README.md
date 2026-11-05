@@ -1,13 +1,13 @@
 # Wegwart-Würfel
 
-Würfelkästen für die geteilte Welt „Hold der Seeprinzen“, ein D&D-5e-Textabenteuer mit Claude als Spielleitung. Die Datei `wuerfel.js` zeichnet animierte Würfel in ein Visualizer-Widget und schickt das Ergebnis per `sendPrompt` an die Spielleitung.
+Würfelkästen für die geteilte Welt „Oerik“, ein D&D-5e-Textabenteuer mit Claude als Spielleitung. Die Datei `wuerfel.js` zeichnet animierte Würfel in ein Visualizer-Widget und schickt das Ergebnis per `sendPrompt` an die Spielleitung.
 
 ## Aufruf
 
 ```html
 <h2 class="sr-only">Würfelkasten: Überzeugen +4 mit Vorteil</h2>
 <div id="wk">Würfelkasten lädt … Falls nicht, würfle selbst: Überzeugen +4</div>
-<script>WK={art:'probe',nr:3,name:'Überzeugen',bonus:4,anlass:'Aske glaubt dir',modus:'vorteil',grund:'gute Vorbereitung',min:10,minName:'Silberzunge',held:true,sg:15}</script>
+<script>WK={art:'probe',nr:3,name:'Überzeugen',bonus:4,anlass:'Bodo glaubt dir',modus:'vorteil',grund:'gute Vorbereitung',min:10,minName:'Silberzunge',held:true,sg:15}</script>
 <script src="https://cdn.jsdelivr.net/gh/KONTO/wegwart-wuerfel@v1.0/wuerfel.js"></script>
 ```
 
